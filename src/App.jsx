@@ -64,7 +64,7 @@ function App() {
         {/* Global Header: Stays at the top on every page */}
         <header className="w-full max-w-6xl mx-auto flex justify-between items-center px-4 sm:px-6 pt-6 pb-2">
           <h1 className="text-2xl font-black text-slate-800 tracking-tighter">
-            THE SPANISH GYM
+            ESPAÑOL CON SEÑOR
           </h1>
           <div className="text-right text-[10px] font-bold text-slate-400 uppercase tracking-widest">
             SESIÓN: {user.email}
