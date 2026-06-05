@@ -4,7 +4,7 @@ import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore"; // 🟢 1. Import Firestore
 
 const firebaseConfig = {
-  apiKey: "AIzaSyCNjPpTu1g_8wc2sITS7M8Fqh7GZnueVKw",
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain: "senorplus-1926c.firebaseapp.com",
   projectId: "senorplus-1926c",
   storageBucket: "senorplus-1926c.firebasestorage.app",
