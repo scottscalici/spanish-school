@@ -1,4 +1,5 @@
 // src/firebase.js
+// forcing github update
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore"; // 🟢 1. Import Firestore
