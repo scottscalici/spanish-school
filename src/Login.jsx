@@ -1,35 +1,93 @@
-// src/Login.jsx
+// src/AuthPage.jsx (You can rename the file or keep it as Login.jsx)
 import React, { useState } from 'react';
-import { signInWithEmailAndPassword } from 'firebase/auth';
-import { auth } from './firebase'; // This connects to your specific database!
+import { 
+  signInWithEmailAndPassword, 
+  createUserWithEmailAndPassword, 
+  sendPasswordResetEmail 
+} from 'firebase/auth';
+import { doc, setDoc } from 'firebase/firestore';
+import { auth, db } from './firebase'; // Make sure 'db' is exported from your firebase config!
 
-const Login = () => {
+const AuthPage = () => {
+  // State to manage which form is showing: 'login', 'register', or 'reset'
+  const [view, setView] = useState('login'); 
+  
+  // Form input states
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  
+  // Feedback states
   const [error, setError] = useState(null);
+  const [message, setMessage] = useState(null); // For success messages like password resets
 
-  const handleLogin = async (e) => {
-    e.preventDefault(); // Prevents the page from refreshing
+  const handleAuthAction = async (e) => {
+    e.preventDefault();
+    setError(null);
+    setMessage(null);
+
     try {
-      // This is the actual Firebase command to log a student in:
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      console.log("Logged in user:", userCredential.user.email);
-      alert("¡Acceso concedido! Welcome to the Gym.");
+      if (view === 'login') {
+        // --- LOGIN FLOW ---
+        const userCredential = await signInWithEmailAndPassword(auth, email, password);
+        console.log("Logged in user:", userCredential.user.email);
+        alert("¡Acceso concedido! Welcome back to the Gym.");
+        
+      } else if (view === 'register') {
+        // --- REGISTRATION FLOW ---
+        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        const user = userCredential.user;
+        
+        // Immediately create a document in Firestore to assign the "student" role
+        await setDoc(doc(db, 'users', user.uid), {
+          email: user.email,
+          role: 'student', // Default role for all new sign-ups
+          createdAt: new Date().toISOString()
+        });
+
+        console.log("New user registered and role assigned:", user.email);
+        alert("¡Cuenta creada! You are officially enrolled.");
+        
+      } else if (view === 'reset') {
+        // --- PASSWORD RESET FLOW ---
+        await sendPasswordResetEmail(auth, email);
+        setMessage("¡Revisa tu correo! We sent a password reset link to your email.");
+      }
     } catch (err) {
-      setError("Credenciales incorrectas. Please check your email/password.");
+      console.error(err);
+      // Simplify common Firebase error messages for the user
+      if (err.code === 'auth/email-already-in-use') setError("Ese correo ya está registrado. Por favor, inicia sesión o recupera tu contraseña.");
+      else if (err.code === 'auth/wrong-password' || err.code === 'auth/user-not-found') setError("Credenciales incorrectas.");
+      else if (err.code === 'auth/weak-password') setError("La contraseña debe tener al menos 6 caracteres.");
+      else setError("Hubo un error. Please try again.");
     }
+  };
+
+  // Helper to switch views and clear old errors/messages
+  const switchView = (newView) => {
+    setView(newView);
+    setError(null);
+    setMessage(null);
+    setPassword(''); // Clear password field for security
   };
 
   return (
     <div style={{ maxWidth: '400px', margin: '50px auto', padding: '20px', fontFamily: 'sans-serif', border: '2px solid #ccc', borderRadius: '10px' }}>
-      <h2 style={{ textAlign: 'center', color: '#333' }}>Acceso Estudiante 🔑</h2>
       
-      <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+      {/* Dynamic Header based on the current view */}
+      <h2 style={{ textAlign: 'center', color: '#333' }}>
+        {view === 'login' && 'Acceso Estudiante 🔑'}
+        {view === 'register' && 'Crear Cuenta Nueva 📝'}
+        {view === 'reset' && 'Recuperar Contraseña 🔄'}
+      </h2>
+      
+      <form onSubmit={handleAuthAction} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+        
+        {/* Email is required for all three views */}
         <div>
           <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '5px' }}>Email</label>
           <input 
             type="email" 
-            placeholder="estudiante@gym.com"
+            placeholder="estudiante@escuela.edu"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
@@ -37,28 +95,50 @@ const Login = () => {
           />
         </div>
 
-        <div>
-          <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '5px' }}>Contraseña</label>
-          <input 
-            type="password" 
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            style={{ width: '100%', padding: '10px', boxSizing: 'border-box' }}
-          />
-        </div>
+        {/* Password is not needed for the reset flow */}
+        {view !== 'reset' && (
+          <div>
+            <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '5px' }}>Contraseña</label>
+            <input 
+              type="password" 
+              placeholder={view === 'register' ? "Mínimo 6 caracteres" : ""}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              style={{ width: '100%', padding: '10px', boxSizing: 'border-box' }}
+            />
+          </div>
+        )}
 
-        {error && <p style={{ color: 'red', fontSize: '14px', fontWeight: 'bold' }}>{error}</p>}
+        {/* Feedback Messages */}
+        {error && <p style={{ color: 'red', fontSize: '14px', fontWeight: 'bold', margin: 0 }}>{error}</p>}
+        {message && <p style={{ color: 'green', fontSize: '14px', fontWeight: 'bold', margin: 0 }}>{message}</p>}
 
+        {/* Dynamic Submit Button */}
         <button 
           type="submit"
           style={{ backgroundColor: '#2c3e50', color: 'white', padding: '12px', fontWeight: 'bold', cursor: 'pointer', border: 'none', borderRadius: '5px' }}
         >
-          ENTRAR AL GIMNASIO ➔
+          {view === 'login' && 'ENTRAR AL GIMNASIO ➔'}
+          {view === 'register' && 'REGISTRARSE ➔'}
+          {view === 'reset' && 'ENVIAR ENLACE ➔'}
         </button>
       </form>
+
+      {/* Navigation Links to switch views */}
+      <div style={{ marginTop: '20px', textAlign: 'center', fontSize: '14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+        {view === 'login' ? (
+          <>
+            <a href="#" onClick={(e) => { e.preventDefault(); switchView('register'); }} style={{ color: '#2980b9', textDecoration: 'none' }}>¿No tienes cuenta? Regístrate aquí.</a>
+            <a href="#" onClick={(e) => { e.preventDefault(); switchView('reset'); }} style={{ color: '#7f8c8d', textDecoration: 'none' }}>¿Olvidaste tu contraseña?</a>
+          </>
+        ) : (
+          <a href="#" onClick={(e) => { e.preventDefault(); switchView('login'); }} style={{ color: '#2980b9', textDecoration: 'none' }}>Volver al inicio de sesión</a>
+        )}
+      </div>
+
     </div>
   );
 };
 
-export default Login;
+export default AuthPage;
