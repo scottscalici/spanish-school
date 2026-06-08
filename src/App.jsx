@@ -25,7 +25,6 @@ import EslabonesUploader from './admin/EslabonesUploader';
 import VerbVault from './admin/MasterDashboard/components/VerbVault';
 import VocabVault from './admin/MasterDashboard/components/VocabVault';
 import TareasDashboard from './admin/MasterDashboard/components/TareasDashboard';
-import TestPermissions from './TestPermissions';
 
 function App() {
   const [user, setUser] = useState(null);
@@ -73,7 +72,7 @@ function App() {
         </header>
 
         <main className="w-full flex-grow">
-        <TestPermissions />
+          
           {/* 🚀 THE TRAFFIC COP: Decides what goes in the main area */}
           <Routes>
   <Route path="/" element={<Dashboard user={user} />} />
