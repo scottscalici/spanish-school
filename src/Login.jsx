@@ -1,4 +1,4 @@
-// src/AuthPage.jsx (You can rename the file or keep it as Login.jsx)
+// src/Login.jsx
 import React, { useState } from 'react';
 import { 
   signInWithEmailAndPassword, 
@@ -6,9 +6,9 @@ import {
   sendPasswordResetEmail 
 } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
-import { auth, db } from './firebase'; // Make sure 'db' is exported from your firebase config!
+import { auth, db } from './firebase'; 
 
-const AuthPage = () => {
+const Login = ({ isEnglish }) => {
   // State to manage which form is showing: 'login', 'register', or 'reset'
   const [view, setView] = useState('login'); 
   
@@ -18,7 +18,7 @@ const AuthPage = () => {
   
   // Feedback states
   const [error, setError] = useState(null);
-  const [message, setMessage] = useState(null); // For success messages like password resets
+  const [message, setMessage] = useState(null); 
 
   const handleAuthAction = async (e) => {
     e.preventDefault();
@@ -30,7 +30,7 @@ const AuthPage = () => {
         // --- LOGIN FLOW ---
         const userCredential = await signInWithEmailAndPassword(auth, email, password);
         console.log("Logged in user:", userCredential.user.email);
-        alert("¡Acceso concedido! Welcome back to the Gym.");
+        alert(isEnglish ? "Access granted! Welcome." : "¡Acceso concedido! Welcome to the Gym.");
         
       } else if (view === 'register') {
         // --- REGISTRATION FLOW ---
@@ -40,54 +40,58 @@ const AuthPage = () => {
         // Immediately create a document in Firestore to assign the "student" role
         await setDoc(doc(db, 'users', user.uid), {
           email: user.email,
-          role: 'student', // Default role for all new sign-ups
+          role: 'student', 
           createdAt: new Date().toISOString()
         });
 
         console.log("New user registered and role assigned:", user.email);
-        alert("¡Cuenta creada! You are officially enrolled.");
+        alert(isEnglish ? "Account created! You are officially enrolled." : "¡Cuenta creada! You are officially enrolled.");
         
       } else if (view === 'reset') {
         // --- PASSWORD RESET FLOW ---
         await sendPasswordResetEmail(auth, email);
-        setMessage("¡Revisa tu correo! We sent a password reset link to your email.");
+        setMessage(isEnglish ? "Check your email! We sent a password reset link." : "¡Revisa tu correo! We sent a password reset link to your email.");
       }
     } catch (err) {
       console.error(err);
-      // Simplify common Firebase error messages for the user
-      if (err.code === 'auth/email-already-in-use') setError("Ese correo ya está registrado. Por favor, inicia sesión o recupera tu contraseña.");
-      else if (err.code === 'auth/wrong-password' || err.code === 'auth/user-not-found') setError("Credenciales incorrectas.");
-      else if (err.code === 'auth/weak-password') setError("La contraseña debe tener al menos 6 caracteres.");
-      else setError("Hubo un error. Please try again.");
+      // Bilingual error messages
+      if (err.code === 'auth/email-already-in-use') {
+        setError(isEnglish ? "That email is already registered. Please log in or reset your password." : "Ese correo ya está registrado. Por favor, inicia sesión o recupera tu contraseña.");
+      } else if (err.code === 'auth/wrong-password' || err.code === 'auth/user-not-found') {
+        setError(isEnglish ? "Incorrect credentials." : "Credenciales incorrectas.");
+      } else if (err.code === 'auth/weak-password') {
+        setError(isEnglish ? "Password must be at least 6 characters." : "La contraseña debe tener al menos 6 caracteres.");
+      } else {
+        setError(isEnglish ? "There was an error. Please try again." : "Hubo un error. Please try again.");
+      }
     }
   };
 
-  // Helper to switch views and clear old errors/messages
   const switchView = (newView) => {
     setView(newView);
     setError(null);
     setMessage(null);
-    setPassword(''); // Clear password field for security
+    setPassword(''); 
   };
 
   return (
-    <div style={{ maxWidth: '400px', margin: '50px auto', padding: '20px', fontFamily: 'sans-serif', border: '2px solid #ccc', borderRadius: '10px' }}>
+    <div style={{ maxWidth: '400px', margin: '50px auto', padding: '20px', fontFamily: 'sans-serif', border: '2px solid #ccc', borderRadius: '10px', backgroundColor: 'white' }}>
       
-      {/* Dynamic Header based on the current view */}
+      {/* Dynamic Header */}
       <h2 style={{ textAlign: 'center', color: '#333' }}>
-        {view === 'login' && 'Acceso Estudiante 🔑'}
-        {view === 'register' && 'Crear Cuenta Nueva 📝'}
-        {view === 'reset' && 'Recuperar Contraseña 🔄'}
+        {view === 'login' && (isEnglish ? 'Student Login 🔑' : 'Acceso Estudiante 🔑')}
+        {view === 'register' && (isEnglish ? 'Create an Account 📝' : 'Crear Cuenta Nueva 📝')}
+        {view === 'reset' && (isEnglish ? 'Reset Password 🔄' : 'Recuperar Contraseña 🔄')}
       </h2>
       
       <form onSubmit={handleAuthAction} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
         
-        {/* Email is required for all three views */}
+        {/* Email Input */}
         <div>
           <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '5px' }}>Email</label>
           <input 
             type="email" 
-            placeholder="estudiante@escuela.edu"
+            placeholder={isEnglish ? "student@school.edu" : "estudiante@escuela.edu"}
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
@@ -95,13 +99,15 @@ const AuthPage = () => {
           />
         </div>
 
-        {/* Password is not needed for the reset flow */}
+        {/* Password Input (Hidden on Reset View) */}
         {view !== 'reset' && (
           <div>
-            <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '5px' }}>Contraseña</label>
+            <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '5px' }}>
+              {isEnglish ? 'Password' : 'Contraseña'}
+            </label>
             <input 
               type="password" 
-              placeholder={view === 'register' ? "Mínimo 6 caracteres" : ""}
+              placeholder={view === 'register' ? (isEnglish ? "Minimum 6 characters" : "Mínimo 6 caracteres") : ""}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
@@ -119,21 +125,27 @@ const AuthPage = () => {
           type="submit"
           style={{ backgroundColor: '#2c3e50', color: 'white', padding: '12px', fontWeight: 'bold', cursor: 'pointer', border: 'none', borderRadius: '5px' }}
         >
-          {view === 'login' && 'ENTRAR AL GIMNASIO ➔'}
-          {view === 'register' && 'REGISTRARSE ➔'}
-          {view === 'reset' && 'ENVIAR ENLACE ➔'}
+          {view === 'login' && (isEnglish ? 'LOG IN ➔' : 'ENTRAR AL GIMNASIO ➔')}
+          {view === 'register' && (isEnglish ? 'REGISTER ➔' : 'REGISTRARSE ➔')}
+          {view === 'reset' && (isEnglish ? 'SEND LINK ➔' : 'ENVIAR ENLACE ➔')}
         </button>
       </form>
 
-      {/* Navigation Links to switch views */}
+      {/* Navigation Links */}
       <div style={{ marginTop: '20px', textAlign: 'center', fontSize: '14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
         {view === 'login' ? (
           <>
-            <a href="#" onClick={(e) => { e.preventDefault(); switchView('register'); }} style={{ color: '#2980b9', textDecoration: 'none' }}>¿No tienes cuenta? Regístrate aquí.</a>
-            <a href="#" onClick={(e) => { e.preventDefault(); switchView('reset'); }} style={{ color: '#7f8c8d', textDecoration: 'none' }}>¿Olvidaste tu contraseña?</a>
+            <a href="#" onClick={(e) => { e.preventDefault(); switchView('register'); }} style={{ color: '#2980b9', textDecoration: 'none' }}>
+              {isEnglish ? "Don't have an account? Register here." : "¿No tienes cuenta? Regístrate aquí."}
+            </a>
+            <a href="#" onClick={(e) => { e.preventDefault(); switchView('reset'); }} style={{ color: '#7f8c8d', textDecoration: 'none' }}>
+              {isEnglish ? "Forgot your password?" : "¿Olvidaste tu contraseña?"}
+            </a>
           </>
         ) : (
-          <a href="#" onClick={(e) => { e.preventDefault(); switchView('login'); }} style={{ color: '#2980b9', textDecoration: 'none' }}>Volver al inicio de sesión</a>
+          <a href="#" onClick={(e) => { e.preventDefault(); switchView('login'); }} style={{ color: '#2980b9', textDecoration: 'none' }}>
+            {isEnglish ? "Back to login" : "Volver al inicio de sesión"}
+          </a>
         )}
       </div>
 
@@ -141,4 +153,4 @@ const AuthPage = () => {
   );
 };
 
-export default AuthPage;
+export default Login;
