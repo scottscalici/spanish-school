@@ -1,7 +1,7 @@
 // src/Scheduler.jsx
 import React, { useState, useEffect } from 'react';
 import { doc, getDoc, collection, getDocs, query, where, addDoc } from 'firebase/firestore';
-import { db, auth } from './firebase'; 
+import { db } from './firebase'; // Removed 'auth'
 import emailjs from '@emailjs/browser';
 
 const Scheduler = () => {
@@ -21,6 +21,7 @@ const Scheduler = () => {
   const [selectedSlot, setSelectedSlot] = useState(null);
   const [isBooking, setIsBooking] = useState(false);
   const [bookingNotes, setBookingNotes] = useState(''); 
+  const [studentEmail, setStudentEmail] = useState(''); // 🟢 NEW: Manual email state
   const [emailPrefs, setEmailPrefs] = useState({
     receipt: true,
     twoDaysBefore: false,
@@ -144,29 +145,60 @@ const Scheduler = () => {
         const meetingMinsOnly = MEETING_OPTIONS[meetingType].duration;
         const groupedSlots = {};
 
+        // 1. Calculate the exact 24-hour cutoff from right now
+        const now = new Date();
+        const cutoffTime = new Date(now.getTime() + (24 * 60 * 60 * 1000));
+        
+        const ROUNDING_INTERVAL = 5;
+
         activeBlocks.forEach(block => {
           let currentStartMins = timeToMins(block.start);
           const endBlockMins = timeToMins(block.end);
+          let isFirstSlot = true;
 
           while (currentStartMins + totalDurationRequired <= endBlockMins) {
             const meetingEndMins = currentStartMins + meetingMinsOnly;
             
-            const isConflict = dailyBookings.some(booking => {
-              return (currentStartMins < booking.endMins && meetingEndMins > booking.startMins);
-            });
+            // 2. Build a real Date object for this specific slot to check against our cutoff
+            const slotH = Math.floor(currentStartMins / 60).toString().padStart(2, '0');
+            const slotM = (currentStartMins % 60).toString().padStart(2, '0');
+            const slotDateTime = new Date(`${selectedDate}T${slotH}:${slotM}:00`);
 
-            if (!isConflict) {
-              const blockLabel = getSchoolBlock(currentStartMins);
-              const timeString = `${minsToFormat(currentStartMins)} - ${minsToFormat(meetingEndMins)}`;
+            // 3. Only process this slot if it exists past the 24-hour cutoff
+            if (slotDateTime > cutoffTime) {
               
-              if (!groupedSlots[blockLabel]) groupedSlots[blockLabel] = [];
-              groupedSlots[blockLabel].push({ 
-                rawTime: timeString, 
-                startMins: currentStartMins, 
-                endMins: meetingEndMins 
+              // 4. Overlap Check: Ensure the new meeting AND its 5-minute buffer fit
+              const isConflict = dailyBookings.some(booking => {
+                const bookedStart = booking.startMins;
+                const bookedEnd = booking.endMins + BUFFER_MINS; // Include the buffer in the blocked time
+                const newStart = currentStartMins;
+                const newEnd = meetingEndMins + BUFFER_MINS;
+
+                return (newStart < bookedEnd && newEnd > bookedStart);
               });
+
+              if (!isConflict) {
+                const blockLabel = getSchoolBlock(currentStartMins);
+                const timeString = `${minsToFormat(currentStartMins)} - ${minsToFormat(meetingEndMins)}`;
+                
+                if (!groupedSlots[blockLabel]) groupedSlots[blockLabel] = [];
+                groupedSlots[blockLabel].push({ 
+                  rawTime: timeString, 
+                  startMins: currentStartMins, 
+                  endMins: meetingEndMins 
+                });
+              }
             }
-            currentStartMins += totalDurationRequired;
+
+            // 5. Increment logic: Keep the very first minute exact, then snap to a 5-minute grid
+            if (isFirstSlot) {
+              // e.g., 8:51 becomes 8:55
+              currentStartMins = Math.ceil((currentStartMins + 1) / ROUNDING_INTERVAL) * ROUNDING_INTERVAL;
+              isFirstSlot = false;
+            } else {
+              // e.g., 8:55 becomes 9:00, 9:05, etc.
+              currentStartMins += ROUNDING_INTERVAL;
+            }
           }
         });
 
@@ -181,17 +213,17 @@ const Scheduler = () => {
  // --- SAVE BOOKING ---
  const submitBooking = async () => {
   setIsBooking(true);
-  const user = auth.currentUser;
 
-  if (!user) {
-    alert("You must be logged in to book a meeting.");
+  // 🟢 NEW: Require an email since they aren't logging in
+  if (!studentEmail || !studentEmail.includes('@')) {
+    alert("Please enter a valid email address so we can send your receipt.");
     setIsBooking(false);
     return;
   }
 
   const payload = {
-    studentUid: user.uid,
-    studentEmail: user.email,
+    studentUid: 'guest', // 🟢 NEW: No longer using Firebase UID
+    studentEmail: studentEmail, // 🟢 NEW: Using manual email state
     meetingType: meetingType,
     date: selectedDate,
     dayCycle: dayCycle, 
@@ -209,13 +241,13 @@ const Scheduler = () => {
     // 1. Save the actual booking to your JSON database
     await addDoc(collection(db, 'bookings'), payload);
 
-    // 2. 🟢 NEW: Trigger the EmailJS Receipt
+    // 2. Trigger the EmailJS Receipt
     if (emailPrefs.receipt) {
       await emailjs.send(
-        'service_9sslrqv',     // <-- From EmailJS Services tab
+        'service_zgelqce',     // <-- From EmailJS Services tab
         'template_zlacnbh',    // <-- From EmailJS Templates tab
         {
-          to_email: user.email,
+          to_email: studentEmail, // 🟢 NEW: Using manual email state
           meeting_type: MEETING_OPTIONS[meetingType].label,
           date: selectedDate,
           day_cycle: dayCycle,
@@ -231,6 +263,7 @@ const Scheduler = () => {
     
     setSelectedSlot(null); 
     setBookingNotes('');
+    setStudentEmail(''); // 🟢 NEW: Clear email input
     const tempDate = selectedDate;
     setSelectedDate('');
     setTimeout(() => setSelectedDate(tempDate), 50);
@@ -240,11 +273,12 @@ const Scheduler = () => {
     alert("Failed to process request. Please try again.");
   }
   setIsBooking(false);
-}; // 🟢 <--- HERE IS THE MISSING CLOSING BRACE!
+};
 
   const handleOpenModal = (slot) => {
     setSelectedSlot(slot);
     setBookingNotes(''); 
+    setStudentEmail(''); // 🟢 NEW: Clear email input when opening modal
   };
 
   const hasAvailability = Object.keys(availableSlots).length > 0;
@@ -266,9 +300,23 @@ const Scheduler = () => {
 
             <div className="bg-blue-50 p-4 rounded-lg border border-blue-100 mb-6">
               <p className="text-sm font-bold text-slate-500 uppercase tracking-widest mb-1">Date & Time</p>
-              {/* 🟢 TRANSLATED TO ENGLISH */}
               <p className="text-lg font-black text-slate-800">{selectedDate} • DAY {dayCycle}</p>
               <p className="text-lg font-black text-slate-800">{selectedSlot.rawTime}</p>
+            </div>
+
+            {/* 🟢 NEW: Manual Email Input */}
+            <div className="mb-4">
+              <label className="block text-sm font-bold text-slate-700 uppercase tracking-wide mb-2">
+                Your Email Address
+              </label>
+              <input 
+                type="email" 
+                value={studentEmail}
+                onChange={(e) => setStudentEmail(e.target.value)}
+                placeholder="student@school.edu"
+                className="w-full p-3 border border-slate-300 rounded-lg text-sm text-slate-700 focus:outline-none focus:border-blue-600"
+                required
+              />
             </div>
 
             <div className="mb-6">
@@ -341,7 +389,6 @@ const Scheduler = () => {
           <div>
             <div className="flex justify-between items-end mb-2">
               <label className="block text-sm font-bold text-slate-700 uppercase tracking-wide">2. Select Date</label>
-              {/* 🟢 TRANSLATED TO ENGLISH */}
               {dayCycle && dayCycle !== 'BLACKOUT' && (
                 <span className={`text-xs font-black px-3 py-1 rounded-full uppercase tracking-widest ${dayCycle === 'A' ? 'bg-indigo-100 text-indigo-800' : 'bg-emerald-100 text-emerald-800'}`}>
                   DAY {dayCycle}
