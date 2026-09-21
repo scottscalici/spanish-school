@@ -7,10 +7,15 @@ export const config = {
 
 // Initialize Firebase Admin (bypasses Firestore security rules, unlike the
 // client SDK, so this works with no signed-in user).
+// Read via bracket notation (not process.env.FIREBASE_SERVICE_ACCOUNT_KEY):
+// Netlify's function bundler inlines build-time env vars accessed by dot
+// notation as literals into the deployed bundle, which would bake this
+// private key into the shipped code. Bracket notation isn't statically
+// resolvable, so the value is only read at runtime.
 if (!admin.apps.length) {
   admin.initializeApp({
     credential: admin.credential.cert(
-      JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY)
+      JSON.parse(process.env['FIREBASE_SERVICE_ACCOUNT_KEY'])
     )
   });
 }
