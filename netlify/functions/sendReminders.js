@@ -1,4 +1,5 @@
-import admin from "firebase-admin";
+import { initializeApp, cert, getApps } from "firebase-admin/app";
+import { getFirestore } from "firebase-admin/firestore";
 
 // Runs every day at 11:00 AM UTC (7:00 AM EDT)
 export const config = {
@@ -12,15 +13,15 @@ export const config = {
 // notation as literals into the deployed bundle, which would bake this
 // private key into the shipped code. Bracket notation isn't statically
 // resolvable, so the value is only read at runtime.
-if (!admin.apps.length) {
-  admin.initializeApp({
-    credential: admin.credential.cert(
+if (!getApps().length) {
+  initializeApp({
+    credential: cert(
       JSON.parse(process.env['FIREBASE_SERVICE_ACCOUNT_KEY'])
     )
   });
 }
 
-const db = admin.firestore();
+const db = getFirestore();
 
 const MEETING_OPTIONS = {
   AMES: 'AMES Meeting - 25m',
