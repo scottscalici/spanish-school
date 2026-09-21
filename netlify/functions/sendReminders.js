@@ -1,34 +1,40 @@
-import { initializeApp } from "firebase/app";
-import { getFirestore, collection, getDocs } from "firebase/firestore";
+import admin from "firebase-admin";
 
 // Runs every day at 11:00 AM UTC (7:00 AM EDT)
 export const config = {
   schedule: "0 11 * * *"
 };
 
-// Initialize Firebase for the backend
-const firebaseConfig = {
-  apiKey: process.env.VITE_FIREBASE_API_KEY, 
-  authDomain: "senorplus-1926c.firebaseapp.com",
-  projectId: "senorplus-1926c",
-  storageBucket: "senorplus-1926c.firebasestorage.app",
-  messagingSenderId: "176067304584",
-  appId: "1:176067304584:web:16346821442861c7f6533d"
+// Initialize Firebase Admin (bypasses Firestore security rules, unlike the
+// client SDK, so this works with no signed-in user).
+if (!admin.apps.length) {
+  admin.initializeApp({
+    credential: admin.credential.cert(
+      JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY)
+    )
+  });
+}
+
+const db = admin.firestore();
+
+const MEETING_OPTIONS = {
+  AMES: 'AMES Meeting - 25m',
+  CAS: 'CAS Interview - 30m',
+  EE: 'Extended Essay - 60m'
 };
 
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
+// Maps a reminder key to the booking.reminders flag that opts into it and
+// the human-readable phrase used in the email.
+const REMINDER_DEFS = [
+  { key: 'twoDaysBefore', prefField: 'twoDaysBefore', offsetDays: 2, timeFrame: 'IN 48 HOURS' },
+  { key: 'default24h', prefField: 'default24h', offsetDays: 1, timeFrame: 'TOMORROW (24 HOURS)' },
+  { key: 'morningOf', prefField: 'morningOf', offsetDays: 0, timeFrame: 'TODAY' }
+];
 
 // EmailJS REST API Helper
 const sendEmailJS = async (booking, timeFrame) => {
-  const MEETING_OPTIONS = {
-    AMES: 'AMES Meeting - 25m',
-    CAS: 'CAS Interview - 30m',
-    EE: 'Extended Essay - 60m'
-  };
-
   const payload = {
-    service_id: "service_zgelqce", // 👈 Paste your Gmail service ID here
+    service_id: "service_zgelqce",
     template_id: "template_zlacnbh",
     user_id: "cT8kGbRn8OIQpCvPm",
     template_params: {
@@ -42,46 +48,68 @@ const sendEmailJS = async (booking, timeFrame) => {
     }
   };
 
-  await fetch('https://api.emailjs.com/api/v1.0/email/send', {
+  const res = await fetch('https://api.emailjs.com/api/v1.0/email/send', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
   });
+
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`EmailJS ${res.status}: ${body}`);
+  }
 };
 
 export default async () => {
+  const getOffsetDate = (days) => {
+    const d = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Detroit" }));
+    d.setDate(d.getDate() + days);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+
+  const dateByOffset = { 0: getOffsetDate(0), 1: getOffsetDate(1), 2: getOffsetDate(2) };
+
+  let sent = 0;
+  let failed = 0;
+  let skipped = 0;
+
   try {
-    const getOffsetDate = (days) => {
-      const d = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Detroit" }));
-      d.setDate(d.getDate() + days);
-      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    };
+    const bookingsSnap = await db.collection("bookings").get();
 
-    const todayStr = getOffsetDate(0);
-    const tomorrowStr = getOffsetDate(1);
-    const twoDaysStr = getOffsetDate(2);
+    const jobs = [];
 
-    const bookingsSnap = await getDocs(collection(db, "bookings"));
-    const promises = [];
-
-    bookingsSnap.forEach(doc => {
-      const b = doc.data();
+    bookingsSnap.forEach(docSnap => {
+      const b = docSnap.data();
       if (b.status !== "confirmed" || !b.reminders) return;
 
-      if (b.date === todayStr && b.reminders.morningOf) {
-        promises.push(sendEmailJS(b, "TODAY"));
-      } else if (b.date === tomorrowStr && b.reminders.default24h) {
-        promises.push(sendEmailJS(b, "TOMORROW"));
-      } else if (b.date === twoDaysStr && b.reminders.twoDaysBefore) {
-        promises.push(sendEmailJS(b, "IN 2 DAYS"));
-      }
+      REMINDER_DEFS.forEach(({ key, prefField, offsetDays, timeFrame }) => {
+        if (b.date !== dateByOffset[offsetDays]) return;
+        if (!b.reminders[prefField]) return;
+        if (b.remindersSent?.[key]) {
+          skipped++;
+          return;
+        }
+
+        jobs.push(
+          sendEmailJS(b, timeFrame)
+            .then(() => docSnap.ref.update({ [`remindersSent.${key}`]: true }))
+            .then(() => { sent++; })
+            .catch(err => {
+              failed++;
+              console.error(`Reminder failed for booking ${docSnap.id} (${key}):`, err.message);
+            })
+        );
+      });
     });
 
-    await Promise.all(promises);
-    return new Response("Reminders processed successfully", { status: 200 });
+    await Promise.all(jobs);
+
+    const summary = `Reminders processed: ${sent} sent, ${failed} failed, ${skipped} already sent.`;
+    console.log(summary);
+    return new Response(summary, { status: failed > 0 ? 207 : 200 });
 
   } catch (error) {
-    console.error(error);
-    return new Response("Failed to send reminders", { status: 500 });
+    console.error("Fatal error running sendReminders:", error);
+    return new Response(`Failed to send reminders: ${error.message}`, { status: 500 });
   }
 };

@@ -345,7 +345,7 @@ const Scheduler = () => {
                 </label>
                 <label className="flex items-center gap-3 cursor-pointer">
                   <input type="checkbox" checked={emailPrefs.twoDaysBefore} onChange={(e) => setEmailPrefs({...emailPrefs, twoDaysBefore: e.target.checked})} className="w-4 h-4 text-blue-600 accent-blue-600" />
-                  Send reminder 2 days before
+                  Send reminder 48 hours before
                 </label>
                 <label className="flex items-center gap-3 cursor-pointer">
                   <input type="checkbox" checked={emailPrefs.morningOf} onChange={(e) => setEmailPrefs({...emailPrefs, morningOf: e.target.checked})} className="w-4 h-4 text-blue-600 accent-blue-600" />

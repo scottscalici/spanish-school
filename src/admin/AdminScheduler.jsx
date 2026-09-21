@@ -26,6 +26,16 @@ const AdminScheduler = () => {
 
   const AVAILABLE_TAGS = ['AMES', 'CAS', 'EE', '1A', '2A', '3A', '4A', '1B', '2B', '3B', '4B'];
 
+  // --- HELPER: TODAY (school timezone) ---
+  const getTodayStr = () => {
+    const d = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Detroit" }));
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+
+  const todayStr = getTodayStr();
+  const upcomingBookings = bookings.filter(b => b.date >= todayStr);
+  const archivedBookings = bookings.filter(b => b.date < todayStr).slice().reverse();
+
   // --- HELPER: ACADEMIC YEAR ---
   const getAcademicYearDocId = (dateString) => {
     const [yearStr, monthStr] = dateString.split('-');
@@ -168,6 +178,9 @@ const AdminScheduler = () => {
           <button onClick={() => setActiveTab('bookings')} className={`px-4 py-2 font-bold rounded-lg ${activeTab === 'bookings' ? 'bg-amber-500 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>
             Upcoming Meetings
           </button>
+          <button onClick={() => setActiveTab('archive')} className={`px-4 py-2 font-bold rounded-lg ${activeTab === 'archive' ? 'bg-slate-600 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>
+            Archived
+          </button>
           <button onClick={() => setActiveTab('roster')} className={`px-4 py-2 font-bold rounded-lg ${activeTab === 'roster' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>
             Roster & Tags
           </button>
@@ -183,14 +196,14 @@ const AdminScheduler = () => {
       {/* --- TAB 0: BOOKINGS (NEW) --- */}
       {activeTab === 'bookings' && (
         <div>
-          <p className="text-slate-500 mb-6 font-bold">Review and manage your upcoming student meetings.</p>
+          <p className="text-slate-500 mb-6 font-bold">Review and manage your upcoming student meetings, soonest first.</p>
           {loadingBookings ? (
             <div className="text-center text-blue-600 font-bold animate-pulse py-10">Loading Calendar...</div>
-          ) : bookings.length === 0 ? (
+          ) : upcomingBookings.length === 0 ? (
             <div className="text-center text-slate-400 py-10 font-bold border-2 border-dashed border-slate-300 rounded-lg">No meetings booked yet. 📅</div>
           ) : (
             <div className="grid grid-cols-1 gap-4">
-              {bookings.map(booking => (
+              {upcomingBookings.map(booking => (
                 <div key={booking.id} className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col md:flex-row gap-4 justify-between hover:border-amber-400 transition-colors">
                   <div className="flex-1">
                     <div className="flex flex-wrap items-center gap-3 mb-2">
@@ -219,6 +232,55 @@ const AdminScheduler = () => {
                       className="text-xs font-bold text-red-500 hover:text-white border border-red-200 hover:bg-red-500 px-4 py-2 rounded transition-colors"
                     >
                       CANCEL MEETING ✖
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* --- TAB: ARCHIVED MEETINGS --- */}
+      {activeTab === 'archive' && (
+        <div>
+          <p className="text-slate-500 mb-6 font-bold">Meetings whose date has already passed, most recent first.</p>
+          {loadingBookings ? (
+            <div className="text-center text-blue-600 font-bold animate-pulse py-10">Loading Calendar...</div>
+          ) : archivedBookings.length === 0 ? (
+            <div className="text-center text-slate-400 py-10 font-bold border-2 border-dashed border-slate-300 rounded-lg">No past meetings yet. 📦</div>
+          ) : (
+            <div className="grid grid-cols-1 gap-4">
+              {archivedBookings.map(booking => (
+                <div key={booking.id} className="bg-slate-50 p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col md:flex-row gap-4 justify-between opacity-80">
+                  <div className="flex-1">
+                    <div className="flex flex-wrap items-center gap-3 mb-2">
+                      <span className="font-black text-xl text-slate-600">{booking.date}</span>
+                      <span className="text-xs font-bold text-amber-800 bg-amber-100 px-3 py-1 rounded-full uppercase tracking-widest">{booking.timeString}</span>
+                      {booking.dayCycle && <span className="text-xs font-bold text-indigo-800 bg-indigo-100 px-3 py-1 rounded-full uppercase tracking-widest">DÍA {booking.dayCycle}</span>}
+                      <span className="text-xs font-bold text-emerald-800 bg-emerald-100 px-3 py-1 rounded-full uppercase tracking-widest">{booking.meetingType}</span>
+                      <span className="text-xs font-bold text-white bg-slate-500 px-3 py-1 rounded-full uppercase tracking-widest">Archived</span>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-4 text-sm">
+                      <p className="font-bold text-slate-700">Student: <span className="font-normal text-slate-600">{booking.studentEmail}</span></p>
+                      <p className="font-bold text-slate-700">Block: <span className="font-normal text-slate-600">{booking.blockLabel}</span></p>
+                    </div>
+
+                    {booking.notes && (
+                      <div className="mt-4 bg-white border border-slate-200 p-4 rounded-lg">
+                        <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">📝 Notes from Student:</p>
+                        <p className="text-sm font-bold text-slate-800">{booking.notes}</p>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex items-start justify-end">
+                    <button
+                      onClick={() => handleCancelBooking(booking.id)}
+                      className="text-xs font-bold text-red-500 hover:text-white border border-red-200 hover:bg-red-500 px-4 py-2 rounded transition-colors"
+                    >
+                      DELETE ✖
                     </button>
                   </div>
                 </div>
