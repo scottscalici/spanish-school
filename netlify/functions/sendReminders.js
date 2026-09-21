@@ -43,6 +43,7 @@ const sendEmailJS = async (booking, timeFrame) => {
     service_id: "service_zgelqce",
     template_id: "template_zlacnbh",
     user_id: "cT8kGbRn8OIQpCvPm",
+    accessToken: process.env['EMAILJS_PRIVATE_KEY'],
     template_params: {
       to_email: booking.studentEmail,
       meeting_type: MEETING_OPTIONS[booking.meetingType] || booking.meetingType,
